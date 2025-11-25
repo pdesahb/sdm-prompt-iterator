@@ -4,7 +4,7 @@
 import logging
 import random
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -413,7 +413,7 @@ def extract_truth(experiment: str, email: str, password: str):
     unique_rows = _deduplicate_rows(all_rows, config.match_keys)
 
     ground_truth = GroundTruth(
-        extracted_at=datetime.utcnow().isoformat(),
+        extracted_at=datetime.now(UTC).isoformat(),
         source_jobs=config.truth_job_ids,
         field_name=config.field_name,
         rows=unique_rows,
@@ -541,7 +541,7 @@ def evaluate(
     run_id = generate_run_id()
     run_result = RunResult(
         run_id=run_id,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         prompt=current_prompt,
         metrics={k: v for k, v in metrics.items()},
         errors_sample=errors[:50],
@@ -664,7 +664,7 @@ def iterate(
         run_id = generate_run_id()
         run_result = RunResult(
             run_id=run_id,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             prompt=current_prompt,
             metrics=metrics,
             errors_sample=errors[:50],

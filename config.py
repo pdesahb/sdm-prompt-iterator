@@ -15,7 +15,7 @@ ENDPOINTS = {
     "job_details": "/api/v1/jobs/{job_id}/",
     "return_to_step": "/api/v1/jobs/{job_id}/return-to-step/",
     "classification_results": "/api/v1/categorisation/{action_id}/{job_id}/",
-    "fields_config": "/api/beta/categorisation/{step_id}/fields-config/",
+    "fields_config": "/api/beta/classifications/{step_id}/fields-config/",
     "project_details": "/api/v1/projects/{project_id}/",
     "file_upload": "/api/v1/files/",
     "file_download": "/api/v1/files/{file_id}/download_parsed/",
@@ -45,7 +45,7 @@ DEFAULT_POLL_INTERVAL = 10  # seconds
 DEFAULT_TIMEOUT = 600  # 10 minutes
 
 # Pagination
-DEFAULT_PAGE_SIZE = 500
+DEFAULT_PAGE_SIZE = 200
 
 # Auto-split mode
 DEFAULT_TRAIN_RATIO = 0.75  # 75% for iteration, 25% for evaluation

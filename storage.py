@@ -3,7 +3,7 @@
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +34,7 @@ class ExperimentConfig:
     random_seed: int = 42
     project_id: int | None = None
     model_version: int | None = None
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -287,6 +287,6 @@ def generate_run_id() -> str:
     """Generate a unique run ID."""
     import uuid
 
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     short_uuid = uuid.uuid4().hex[:8]
     return f"{timestamp}_{short_uuid}"
