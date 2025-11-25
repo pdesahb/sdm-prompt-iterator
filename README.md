@@ -1,14 +1,14 @@
 # SDM Prompt Iterator
 
-Outil CLI pour automatiser l'itération et l'optimisation des prompts de catégorisation SDM.
+CLI tool to automate iteration and optimization of SDM categorization prompts.
 
-## Fonctionnalités
+## Features
 
-- **Extraction de vérité terrain** depuis des jobs validés par des humains
-- **Évaluation automatique** des prompts avec métriques (accuracy, recouvrement)
-- **Itération assistée par Claude** pour améliorer les prompts
-- **Mode auto-split** pour éviter l'overfitting (séparation train/eval)
-- **Historique des runs** pour suivre l'évolution des performances
+- **Ground truth extraction** from human-validated jobs
+- **Automatic prompt evaluation** with metrics (accuracy, coverage)
+- **Anthropic-assisted iteration** to improve prompts
+- **Auto-split mode** to prevent overfitting (train/eval separation)
+- **Run history** to track performance evolution
 
 ## Installation
 
@@ -19,7 +19,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Créer un fichier `.env` à la racine du projet :
+Create a `.env` file at the project root:
 
 ```bash
 SDM_USER=user@akeneo.com
@@ -27,16 +27,19 @@ SDM_PASSWORD=your_password
 ANTHROPIC_API_KEY=sk-ant-xxx
 ```
 
-Ces variables peuvent aussi être passées en arguments CLI si besoin.
+Note: make sure that your user is in the correct organization to be able ot fetch & iterate on your prompts.
 
-## Modes d'utilisation
 
-### Mode Manuel
+These variables can also be passed as CLI arguments if needed.
 
-Utilise un job de test existant pour itérer sur le prompt.
+## Usage Modes
+
+### Manual Mode
+
+Uses an existing test job to iterate on the prompt.
 
 ```bash
-# 1. Initialiser l'expérience
+# 1. Initialize the experiment
 python main.py init \
   --experiment "category_optimization" \
   --step-id 123 \
@@ -45,22 +48,22 @@ python main.py init \
   --test-job abc-123-def \
   --truth-jobs job1,job2,job3
 
-# 2. Extraire la vérité terrain
+# 2. Extract ground truth
 python main.py extract-truth --experiment category_optimization
 
-# 3. Évaluer le prompt actuel
+# 3. Evaluate the current prompt
 python main.py evaluate --experiment category_optimization
 
-# 4. Itérer avec Claude
+# 4. Iterate with Anthropic
 python main.py iterate --experiment category_optimization --iterations 3
 ```
 
-### Mode Auto-Split (Recommandé)
+### Auto-Split Mode (Recommended)
 
-Crée automatiquement des jobs train/eval à partir des données de vérité pour éviter l'overfitting.
+Automatically creates train/eval jobs from ground truth data to prevent overfitting.
 
 ```bash
-# 1. Initialiser avec split automatique (75% train, 25% eval)
+# 1. Initialize with automatic split (75% train, 25% eval)
 python main.py init-auto \
   --experiment "category_v2" \
   --step-id 123 \
@@ -70,118 +73,118 @@ python main.py init-auto \
   --train-ratio 0.75 \
   --seed 42
 
-# 2. Extraire la vérité terrain
+# 2. Extract ground truth
 python main.py extract-truth --experiment category_v2
 
-# 3. Itérer sur le job de train
+# 3. Iterate on the train job
 python main.py iterate --experiment category_v2 --iterations 5
 
-# 4. Évaluation finale sur le holdout set
+# 4. Final evaluation on the holdout set
 python main.py final-eval --experiment category_v2
 ```
 
-## Commandes
+## Commands
 
 ### `init`
-Crée une nouvelle expérience en mode manuel.
+Creates a new experiment in manual mode.
 
 | Option | Description |
 |--------|-------------|
-| `--experiment` | Nom de l'expérience |
-| `--email` | Email SDM (ou `SDM_USER` env var) |
-| `--password` | Mot de passe SDM (ou `SDM_PASSWORD` env var) |
-| `--step-id` | ID de l'étape de classification |
-| `--prev-step-id` | ID de l'étape précédente (auto-détecté si omis) |
-| `--field` | Nom du champ de classification (ex: `category`) |
-| `--match-keys` | Colonnes pour matcher les lignes (ex: `product_name,brand`) |
-| `--test-job` | ID du job de test |
-| `--truth-jobs` | IDs des jobs contenant la vérité terrain (séparés par virgule) |
+| `--experiment` | Experiment name |
+| `--email` | SDM email (or `SDM_USER` env var) |
+| `--password` | SDM password (or `SDM_PASSWORD` env var) |
+| `--step-id` | Classification step ID |
+| `--prev-step-id` | Previous step ID (auto-detected if omitted) |
+| `--field` | Classification field name (e.g., `category`) |
+| `--match-keys` | Columns to match rows (e.g., `product_name,brand`) |
+| `--test-job` | Test job ID |
+| `--truth-jobs` | IDs of jobs containing ground truth (comma-separated) |
 
 ### `init-auto`
-Crée une expérience avec split automatique train/eval.
+Creates an experiment with automatic train/eval split.
 
 | Option | Description |
 |--------|-------------|
-| `--train-ratio` | Ratio pour le train set (défaut: 0.75) |
-| `--seed` | Graine aléatoire pour le split (défaut: 42) |
-| *(autres)* | Mêmes options que `init` sauf `--test-job` |
+| `--train-ratio` | Ratio for the train set (default: 0.75) |
+| `--seed` | Random seed for the split (default: 42) |
+| *(others)* | Same options as `init` except `--test-job` |
 
 ### `extract-truth`
-Extrait la vérité terrain depuis les jobs validés.
+Extracts ground truth from validated jobs.
 
 ```bash
 python main.py extract-truth --experiment <name> --email <email> --password <pwd>
 ```
 
 ### `evaluate`
-Évalue le prompt actuel contre la vérité terrain.
+Evaluates the current prompt against ground truth.
 
 | Option | Description |
 |--------|-------------|
-| `--skip-rerun` | Ne pas relancer le job, utiliser les résultats actuels |
-| `--use-eval-job` | Utiliser le job d'évaluation (mode auto-split) |
+| `--skip-rerun` | Do not rerun the job, use current results |
+| `--use-eval-job` | Use the evaluation job (auto-split mode) |
 
 ### `iterate`
-Itère sur le prompt avec l'aide de Claude.
+Iterates on the prompt with Anthropic's help.
 
 | Option | Description |
 |--------|-------------|
-| `--claude-api-key` | Clé API Anthropic (ou `ANTHROPIC_API_KEY` env var) |
-| `--iterations` | Nombre d'itérations (défaut: 3) |
-| `--auto-apply` | Appliquer automatiquement les suggestions |
+| `--anthropic-api-key` | Anthropic API key (or `ANTHROPIC_API_KEY` env var) |
+| `--iterations` | Number of iterations (default: 3) |
+| `--auto-apply` | Automatically apply suggestions |
 
 ### `final-eval`
-Évaluation finale sur le holdout set (mode auto-split uniquement).
+Final evaluation on the holdout set (auto-split mode only).
 
 ### `history`
-Affiche l'historique des runs d'une expérience.
+Displays the run history of an experiment.
 
 ```bash
 python main.py history --experiment <name>
 ```
 
 ### `list`
-Liste toutes les expériences.
+Lists all experiments.
 
 ```bash
 python main.py list
 ```
 
-## Métriques
+## Metrics
 
-Le script calcule deux métriques sur trois ensembles de données :
+The script calculates two metrics on three data sets:
 
-### Métriques
-- **Accuracy** : % de matchs exacts (toutes les catégories identiques)
-- **Coverage (Recouvrement)** : % de lignes avec au moins une catégorie commune
+### Metrics
+- **Accuracy**: % of exact matches (all categories identical)
+- **Coverage**: % of rows with at least one common category
 
-### Ensembles
-- **all** : Toutes les lignes
-- **automated** : Lignes classifiées automatiquement (haute confiance)
-- **to_check** : Lignes marquées "à vérifier" (basse confiance)
+### Data Sets
+- **all**: All rows
+- **automated**: Automatically classified rows (high confidence)
+- **to_check**: Rows marked "to check" (low confidence)
 
-## Structure des fichiers
+## File Structure
 
 ```
 sdm-prompt-iterator/
-├── main.py              # CLI principal
-├── sdm_client.py        # Client API SDM
-├── evaluator.py         # Calcul des métriques
-├── claude_advisor.py    # Intégration Claude
-├── storage.py           # Gestion des expériences
+├── main.py              # Main CLI
+├── sdm_client.py        # SDM API client
+├── evaluator.py         # Metrics calculation
+├── anthropic_advisor.py # Anthropic integration
+├── storage.py           # Experiment management
 ├── config.py            # Configuration
-├── requirements.txt     # Dépendances
-└── experiments/         # Données des expériences
+├── requirements.txt     # Dependencies
+└── experiments/         # Experiment data
     └── {experiment_name}/
         ├── config.json       # Configuration
-        ├── ground_truth.json # Vérité terrain
-        └── runs/             # Historique des runs
+        ├── ground_truth.json # Ground truth
+        └── runs/             # Run history
             └── {run_id}/
                 ├── prompt.txt
                 └── metrics.json
 ```
 
-## Format de la vérité terrain
+## Ground Truth Format
 
 ```json
 {
@@ -203,18 +206,18 @@ sdm-prompt-iterator/
 }
 ```
 
-## Workflow recommandé
+## Recommended Workflow
 
-1. **Collecter des jobs validés** : Avoir plusieurs jobs où un humain a validé/corrigé les classifications
-2. **Utiliser le mode auto-split** : Évite l'overfitting en séparant train et eval
-3. **Itérer 3-5 fois** : Laisser Claude analyser les erreurs et suggérer des améliorations
-4. **Évaluer sur le holdout** : Vérifier que les améliorations généralisent bien
-5. **Garder l'historique** : Comparer les performances entre les runs
+1. **Collect validated jobs**: Have multiple jobs where a human has validated/corrected the classifications
+2. **Use auto-split mode**: Prevents overfitting by separating train and eval
+3. **Iterate 3-5 times**: Let Anthropic analyze errors and suggest improvements
+4. **Evaluate on holdout**: Verify that improvements generalize well
+5. **Keep history**: Compare performance between runs
 
 ## Notes
 
-- L'URL de production SDM est utilisée par défaut : `https://sdm.akeneo.cloud`
-- Le polling du job attend max 10 minutes avec intervalles de 10 secondes
-- Les credentials sont lus depuis les variables d'environnement (`SDM_USER`, `SDM_PASSWORD`, `ANTHROPIC_API_KEY`) ou le fichier `.env`
-- La clé API Claude est optionnelle (mode évaluation seule possible)
-- Le champ `--prev-step-id` est auto-détecté si non fourni
+- The SDM production URL is used by default: `https://sdm.akeneo.cloud`
+- Job polling waits up to 10 minutes with 10-second intervals
+- Credentials are read from environment variables (`SDM_USER`, `SDM_PASSWORD`, `ANTHROPIC_API_KEY`) or the `.env` file
+- The Anthropic API key is optional (evaluation-only mode is possible)
+- The `--prev-step-id` field is auto-detected if not provided

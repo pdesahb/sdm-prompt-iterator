@@ -15,7 +15,7 @@ load_dotenv(Path(__file__).parent / ".env")
 from rich.console import Console
 from rich.table import Table
 
-from claude_advisor import ClaudeAdvisor
+from anthropic_advisor import AnthropicAdvisor
 from config import (
     CATEGORY_SUFFIX,
     CONFIDENCE_COLUMN,
@@ -566,7 +566,7 @@ def evaluate(
     help="SDM password (or SDM_PASSWORD env var)",
 )
 @click.option(
-    "--claude-api-key",
+    "--anthropic-api-key",
     envvar="ANTHROPIC_API_KEY",
     required=True,
     help="Anthropic API key (or ANTHROPIC_API_KEY env var)",
@@ -581,11 +581,11 @@ def iterate(
     experiment: str,
     email: str,
     password: str,
-    claude_api_key: str,
+    anthropic_api_key: str,
     iterations: int,
     auto_apply: bool,
 ):
-    """Iterate on prompt with Claude's suggestions (uses train job in auto-split mode)."""
+    """Iterate on prompt with Anthropic's suggestions (uses train job in auto-split mode)."""
     storage = ExperimentStorage(experiment)
 
     if not storage.exists():
@@ -601,8 +601,8 @@ def iterate(
     config = storage.load_config()
     ground_truth = storage.load_ground_truth()
     client = get_client(email, password)
-    advisor = ClaudeAdvisor(
-        api_key=claude_api_key, code_to_label=ground_truth.code_to_label
+    advisor = AnthropicAdvisor(
+        api_key=anthropic_api_key, code_to_label=ground_truth.code_to_label
     )
 
     # Use train job for iteration
@@ -649,8 +649,8 @@ def iterate(
 
         _display_metrics(metrics, current_prompt)
 
-        # 3. Get Claude's analysis and suggestion
-        console.print("\n[blue]Analyzing errors with Claude...[/blue]")
+        # 3. Get Anthropic's analysis and suggestion
+        console.print("\n[blue]Analyzing errors with Anthropic...[/blue]")
         metrics_dict = {k: v.to_dict() for k, v in metrics.items()}
         result = advisor.iterate(current_prompt, errors, metrics_dict)
 
@@ -668,7 +668,7 @@ def iterate(
             prompt=current_prompt,
             metrics=metrics,
             errors_sample=errors[:50],
-            claude_analysis=result["analysis"],
+            anthropic_analysis=result["analysis"],
             suggested_prompt=result["suggested_prompt"],
         )
         storage.save_run(run_result)
@@ -802,7 +802,7 @@ def history(experiment: str):
     table.add_column("Accuracy (all)", justify="right")
     table.add_column("Coverage (all)", justify="right")
     table.add_column("Accuracy (auto)", justify="right")
-    table.add_column("Has Claude", justify="center")
+    table.add_column("Has Anthropic", justify="center")
 
     for run_id in runs:
         run = storage.load_run(run_id)
@@ -814,7 +814,7 @@ def history(experiment: str):
             f"{all_metrics.accuracy:.1%}" if all_metrics else "-",
             f"{all_metrics.coverage:.1%}" if all_metrics else "-",
             f"{auto_metrics.accuracy:.1%}" if auto_metrics else "-",
-            "✓" if run.claude_analysis else "",
+            "✓" if run.anthropic_analysis else "",
         )
 
     console.print(table)

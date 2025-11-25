@@ -1,4 +1,4 @@
-"""Claude AI integration for prompt analysis and improvement suggestions."""
+"""Anthropic AI integration for prompt analysis and improvement suggestions."""
 
 import logging
 from typing import Any
@@ -72,13 +72,13 @@ Generate an improved prompt that addresses the identified issues.
 Return ONLY the new prompt text, nothing else."""
 
 
-class ClaudeAdvisor:
-    """Uses Claude to analyze errors and suggest prompt improvements."""
+class AnthropicAdvisor:
+    """Uses Anthropic to analyze errors and suggest prompt improvements."""
 
     def __init__(
         self,
         api_key: str,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-5-20250929",
         code_to_label: dict[str, str] | None = None,
     ):
         self.client = anthropic.Anthropic(api_key=api_key)
@@ -107,7 +107,7 @@ class ClaudeAdvisor:
             errors_formatted=errors_formatted,
         )
 
-        logger.info("Sending error analysis request to Claude...")
+        logger.info("Sending error analysis request to Anthropic...")
         response = self.client.messages.create(
             model=self.model,
             max_tokens=2000,
@@ -116,7 +116,7 @@ class ClaudeAdvisor:
         )
 
         analysis = response.content[0].text
-        logger.info("Received error analysis from Claude")
+        logger.info("Received error analysis from Anthropic")
         return analysis
 
     def suggest_prompt(
@@ -137,7 +137,7 @@ class ClaudeAdvisor:
             coverage=coverage,
         )
 
-        logger.info("Requesting prompt suggestion from Claude...")
+        logger.info("Requesting prompt suggestion from Anthropic...")
         response = self.client.messages.create(
             model=self.model,
             max_tokens=2000,
@@ -146,7 +146,7 @@ class ClaudeAdvisor:
         )
 
         suggested_prompt = response.content[0].text.strip()
-        logger.info("Received prompt suggestion from Claude")
+        logger.info("Received prompt suggestion from Anthropic")
         return suggested_prompt
 
     def iterate(

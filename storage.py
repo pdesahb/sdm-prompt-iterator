@@ -132,7 +132,7 @@ class RunResult:
     prompt: str
     metrics: dict[str, EvaluationMetrics]  # 'all', 'automated', 'to_check'
     errors_sample: list[dict]
-    claude_analysis: str | None = None
+    anthropic_analysis: str | None = None
     suggested_prompt: str | None = None
 
     def to_dict(self) -> dict:
@@ -142,7 +142,7 @@ class RunResult:
             "prompt": self.prompt,
             "metrics": {k: v.to_dict() for k, v in self.metrics.items()},
             "errors_sample": self.errors_sample,
-            "claude_analysis": self.claude_analysis,
+            "anthropic_analysis": self.anthropic_analysis,
             "suggested_prompt": self.suggested_prompt,
         }
 
@@ -158,7 +158,7 @@ class RunResult:
             prompt=data["prompt"],
             metrics=metrics,
             errors_sample=data.get("errors_sample", []),
-            claude_analysis=data.get("claude_analysis"),
+            anthropic_analysis=data.get("anthropic_analysis"),
             suggested_prompt=data.get("suggested_prompt"),
         )
 
