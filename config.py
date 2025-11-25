@@ -11,11 +11,11 @@ SDM_BASE_URL = "https://sdm.akeneo.cloud"
 
 # API Endpoints
 ENDPOINTS = {
-    "auth": "/api/auth/token/",
-    "job_details": "/api/jobs/{job_id}/",
-    "return_to_step": "/api/jobs/{job_id}/return-to-step/",
-    "classification_results": "/api/beta/classifications/{action_id}/{job_id}/",
-    "fields_config": "/api/beta/classifications/{step_id}/fields-config/",
+    "auth": "/api/v1/auth/token/",
+    "job_details": "/api/v1/jobs/{job_id}/",
+    "return_to_step": "/api/v1/jobs/{job_id}/return-to-step/",
+    "classification_results": "/api/v1/categorisation/{action_id}/{job_id}/",
+    "fields_config": "/api/beta/categorisation/{step_id}/fields-config/",
     "project_details": "/api/v1/projects/{project_id}/",
     "file_upload": "/api/v1/files/",
     "file_download": "/api/v1/files/{file_id}/download_parsed/",
