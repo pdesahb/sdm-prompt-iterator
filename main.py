@@ -77,148 +77,33 @@ def cli():
     pass
 
 
-# ===== MANUAL MODE INIT =====
+# ===== CREATE EXPERIMENT =====
 
 
-@cli.command()
-@click.option("--experiment", required=True, help="Experiment name")
+@cli.command("create")
+@click.option("--experiment", help="Experiment name")
+@click.option("--email", envvar="SDM_USER", help="SDM email (or SDM_USER env var)")
 @click.option(
-    "--email", envvar="SDM_USER", required=True, help="SDM email (or SDM_USER env var)"
+    "--password", envvar="SDM_PASSWORD", help="SDM password (or SDM_PASSWORD env var)"
 )
-@click.option(
-    "--password",
-    envvar="SDM_PASSWORD",
-    required=True,
-    help="SDM password (or SDM_PASSWORD env var)",
-)
-@click.option("--step-id", required=True, type=int, help="Classification step ID")
+@click.option("--step-id", type=int, help="Classification step ID")
 @click.option(
     "--prev-step-id", type=int, help="Previous step ID (auto-detected if not provided)"
 )
+@click.option("--field", help="Classification field name (e.g., 'category')")
+@click.option("--match-keys", help="Comma-separated column names for row matching")
+@click.option("--truth-jobs", help="Comma-separated job IDs containing ground truth")
 @click.option(
-    "--field", required=True, help="Classification field name (e.g., 'category')"
+    "--mode",
+    type=click.Choice(["auto-split", "manual"]),
+    help="Experiment mode: auto-split creates train/eval jobs, manual uses existing test job",
 )
+@click.option("--train-job", help="Train job ID (manual mode)")
+@click.option("--eval-job", help="Eval job ID (manual mode, optional)")
 @click.option(
-    "--match-keys", required=True, help="Comma-separated column names for row matching"
+    "--train-ratio", type=float, help="Train ratio for auto-split (default: 0.75)"
 )
-@click.option("--test-job", required=True, help="Job ID for testing prompt changes")
-@click.option(
-    "--truth-jobs",
-    required=True,
-    help="Comma-separated job IDs containing ground truth",
-)
-def init(
-    experiment: str,
-    email: str,
-    password: str,
-    step_id: int,
-    prev_step_id: int | None,
-    field: str,
-    match_keys: str,
-    test_job: str,
-    truth_jobs: str,
-):
-    """Initialize a new experiment (manual mode with existing test job)."""
-    storage = ExperimentStorage(experiment)
-
-    if storage.exists():
-        console.print(f"[red]Error: Experiment '{experiment}' already exists[/red]")
-        sys.exit(1)
-
-    # Parse arguments
-    match_keys_list = [k.strip() for k in match_keys.split(",")]
-    truth_jobs_list = [j.strip() for j in truth_jobs.split(",")]
-
-    # Auto-detect previous step if not provided
-    client = get_client(email, password)
-    prev_step_type = None
-    if prev_step_id is None:
-        console.print("[yellow]Auto-detecting previous step...[/yellow]")
-        prev_step_info = client.get_previous_step_info(test_job, step_id)
-
-        if prev_step_info is None:
-            console.print("[red]Could not auto-detect previous step.[/red]")
-            prev_step_id = click.prompt("Please enter the previous step ID", type=int)
-            prev_step_type = click.prompt(
-                "Please enter the previous step type (e.g., 'mappings')", type=str
-            )
-        else:
-            prev_step_id = prev_step_info["id"]
-            prev_step_type = prev_step_info["type"]
-            console.print(
-                f"[green]Detected previous step: {prev_step_info['name']} (ID: {prev_step_id}, type: {prev_step_type})[/green]"
-            )
-    else:
-        # If prev_step_id provided manually, we need to get the type
-        prev_step_info = client.get_previous_step_info(test_job, step_id)
-        prev_step_type = prev_step_info["type"] if prev_step_info else "mappings"
-
-    # Create experiment
-    config = ExperimentConfig(
-        name=experiment,
-        step_id=step_id,
-        prev_step_id=prev_step_id,
-        prev_step_type=prev_step_type,
-        field_name=field,
-        match_keys=match_keys_list,
-        truth_job_ids=truth_jobs_list,
-        mode="manual",
-        test_job_id=test_job,
-    )
-
-    storage.create(config)
-    console.print(f"[green]Created experiment '{experiment}' (manual mode)[/green]")
-    console.print(f"  Step ID: {step_id}")
-    console.print(f"  Previous Step: {prev_step_id} ({prev_step_type})")
-    console.print(f"  Field: {field}")
-    console.print(f"  Match keys: {match_keys_list}")
-    console.print(f"  Test job: {test_job}")
-    console.print(f"  Truth jobs: {truth_jobs_list}")
-    console.print(
-        "\n[yellow]Next step: Run 'extract-truth' to build ground truth[/yellow]"
-    )
-
-
-# ===== AUTO-SPLIT MODE INIT =====
-
-
-@cli.command("init-auto")
-@click.option("--experiment", required=True, help="Experiment name")
-@click.option(
-    "--email", envvar="SDM_USER", required=True, help="SDM email (or SDM_USER env var)"
-)
-@click.option(
-    "--password",
-    envvar="SDM_PASSWORD",
-    required=True,
-    help="SDM password (or SDM_PASSWORD env var)",
-)
-@click.option("--step-id", required=True, type=int, help="Classification step ID")
-@click.option(
-    "--prev-step-id", type=int, help="Previous step ID (auto-detected if not provided)"
-)
-@click.option(
-    "--field", required=True, help="Classification field name (e.g., 'category')"
-)
-@click.option(
-    "--match-keys", required=True, help="Comma-separated column names for row matching"
-)
-@click.option(
-    "--truth-jobs",
-    required=True,
-    help="Comma-separated job IDs containing ground truth",
-)
-@click.option(
-    "--train-ratio",
-    default=DEFAULT_TRAIN_RATIO,
-    help="Ratio of data for training (default: 0.75)",
-)
-@click.option(
-    "--seed",
-    default=DEFAULT_RANDOM_SEED,
-    type=int,
-    help="Random seed for split (default: 42)",
-)
+@click.option("--seed", type=int, help="Random seed for auto-split (default: 42)")
 @click.option(
     "-v",
     "--verbosity",
@@ -226,22 +111,65 @@ def init(
     type=click.IntRange(0, 2),
     help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
 )
-def init_auto(
-    experiment: str,
-    email: str,
-    password: str,
-    step_id: int,
+def create(
+    experiment: str | None,
+    email: str | None,
+    password: str | None,
+    step_id: int | None,
     prev_step_id: int | None,
-    field: str,
-    match_keys: str,
-    truth_jobs: str,
-    train_ratio: float,
-    seed: int,
+    field: str | None,
+    match_keys: str | None,
+    truth_jobs: str | None,
+    mode: str | None,
+    train_job: str | None,
+    eval_job: str | None,
+    train_ratio: float | None,
+    seed: int | None,
     verbosity: int,
 ):
-    """Initialize experiment with auto-split mode (creates train/eval jobs from truth data)."""
-    storage = ExperimentStorage(experiment)
+    """Create a new experiment (interactive if options not provided)."""
+    # Prompt for required fields if not provided
+    if not experiment:
+        experiment = click.prompt("Experiment name")
+    if not step_id:
+        step_id = click.prompt("Classification step ID", type=int)
+    if not field:
+        field = click.prompt("Classification field name (e.g., 'category')")
+    if not match_keys:
+        match_keys = click.prompt("Columns to match rows (comma-separated)")
+    if not truth_jobs:
+        truth_jobs = click.prompt("Job IDs containing ground truth (comma-separated)")
 
+    # Mode selection
+    if not mode:
+        mode = click.prompt(
+            "Mode",
+            type=click.Choice(["auto-split", "manual"]),
+            default="auto-split",
+        )
+
+    # Mode-specific options
+    if mode == "auto-split":
+        if train_ratio is None:
+            train_ratio = click.prompt(
+                "Train ratio", default=DEFAULT_TRAIN_RATIO, type=float
+            )
+        if seed is None:
+            seed = click.prompt("Random seed", default=DEFAULT_RANDOM_SEED, type=int)
+    else:  # manual
+        if not train_job:
+            train_job = click.prompt("Train job ID")
+        if not eval_job:
+            eval_job = click.prompt(
+                "Eval job ID (optional, press Enter to skip)",
+                default="",
+                show_default=False,
+            )
+            if not eval_job:
+                eval_job = None
+
+    # Check if experiment already exists
+    storage = ExperimentStorage(experiment)
     if storage.exists():
         console.print(f"[red]Error: Experiment '{experiment}' already exists[/red]")
         sys.exit(1)
@@ -250,124 +178,199 @@ def init_auto(
     match_keys_list = [k.strip() for k in match_keys.split(",")]
     truth_jobs_list = [j.strip() for j in truth_jobs.split(",")]
 
+    # Prompt for credentials if not provided
+    if not email:
+        email = click.prompt("SDM email")
+    if not password:
+        password = click.prompt("SDM password", hide_input=True)
+
     client = get_client(email, password)
 
-    # Get project info from first truth job
-    log_progress("[blue]Getting project info from truth jobs...[/blue]", verbosity)
-    project_info = client.get_project_info_from_job(truth_jobs_list[0])
-    project_id = project_info["project_id"]
-    model_version = project_info["model_version"]
-    log_detail(f"  Project ID: {project_id}, Model version: {model_version}", verbosity)
+    if mode == "auto-split":
+        # ===== AUTO-SPLIT MODE =====
+        # Get project info from first truth job
+        log_progress("[blue]Getting project info from truth jobs...[/blue]", verbosity)
+        project_info = client.get_project_info_from_job(truth_jobs_list[0])
+        project_id = project_info["project_id"]
+        model_version = project_info["model_version"]
+        log_detail(
+            f"  Project ID: {project_id}, Model version: {model_version}", verbosity
+        )
 
-    # Auto-detect previous step if not provided
-    prev_step_type = None
-    if prev_step_id is None:
-        log_progress("[yellow]Auto-detecting previous step...[/yellow]", verbosity)
-        prev_step_info = client.get_previous_step_info(truth_jobs_list[0], step_id)
+        # Auto-detect previous step if not provided
+        prev_step_type = None
+        if prev_step_id is None:
+            log_progress("[yellow]Auto-detecting previous step...[/yellow]", verbosity)
+            prev_step_info = client.get_previous_step_info(truth_jobs_list[0], step_id)
 
-        if prev_step_info is None:
-            console.print("[red]Could not auto-detect previous step.[/red]")
-            prev_step_id = click.prompt("Please enter the previous step ID", type=int)
-            prev_step_type = click.prompt(
-                "Please enter the previous step type (e.g., 'mappings')", type=str
-            )
+            if prev_step_info is None:
+                console.print("[red]Could not auto-detect previous step.[/red]")
+                prev_step_id = click.prompt(
+                    "Please enter the previous step ID", type=int
+                )
+                prev_step_type = click.prompt(
+                    "Please enter the previous step type (e.g., 'mappings')", type=str
+                )
+            else:
+                prev_step_id = prev_step_info["id"]
+                prev_step_type = prev_step_info["type"]
+                log_progress(
+                    f"[green]Detected previous step: {prev_step_info['name']} (ID: {prev_step_id})[/green]",
+                    verbosity,
+                )
+                log_detail(f"[dim]Step type: {prev_step_type}[/dim]", verbosity)
         else:
-            prev_step_id = prev_step_info["id"]
-            prev_step_type = prev_step_info["type"]
-            log_progress(
-                f"[green]Detected previous step: {prev_step_info['name']} (ID: {prev_step_id})[/green]",
-                verbosity,
-            )
-            log_detail(f"[dim]Step type: {prev_step_type}[/dim]", verbosity)
+            prev_step_info = client.get_previous_step_info(truth_jobs_list[0], step_id)
+            prev_step_type = prev_step_info["type"] if prev_step_info else "mappings"
+
+        # Download and concatenate source data from all truth jobs
+        log_progress(
+            "[blue]Downloading source data from truth jobs...[/blue]", verbosity
+        )
+        all_source_rows = []
+        for job_id in truth_jobs_list:
+            log_detail(f"  Downloading from job {job_id}...", verbosity)
+            rows = client.download_job_source_data(job_id)
+            all_source_rows.extend(rows)
+            log_detail(f"    Got {len(rows)} rows", verbosity)
+
+        log_progress(
+            f"[green]Total source rows: {len(all_source_rows)}[/green]", verbosity
+        )
+
+        # Shuffle and split
+        random.seed(seed)
+        random.shuffle(all_source_rows)
+
+        split_idx = int(len(all_source_rows) * train_ratio)
+        train_rows = all_source_rows[:split_idx]
+        eval_rows = all_source_rows[split_idx:]
+
+        log_progress(
+            f"  Train set: {len(train_rows)} rows ({train_ratio:.0%})", verbosity
+        )
+        log_progress(
+            f"  Eval set: {len(eval_rows)} rows ({1 - train_ratio:.0%})", verbosity
+        )
+
+        # Upload files and create jobs
+        log_progress("[blue]Creating train job...[/blue]", verbosity)
+        train_file_id = client.upload_file_json(train_rows)
+        train_job_id = client.create_job(
+            name=f"{experiment}_train",
+            project_id=project_id,
+            file_id=train_file_id,
+            model_version=model_version,
+        )
+        log_progress(f"  Train job created: {train_job_id}", verbosity)
+
+        log_progress("[blue]Creating eval job...[/blue]", verbosity)
+        eval_file_id = client.upload_file_json(eval_rows)
+        eval_job_id = client.create_job(
+            name=f"{experiment}_eval",
+            project_id=project_id,
+            file_id=eval_file_id,
+            model_version=model_version,
+        )
+        log_progress(f"  Eval job created: {eval_job_id}", verbosity)
+
+        # Wait for jobs to complete initial processing
+        log_progress(
+            "[blue]Waiting for jobs to complete initial run...[/blue]", verbosity
+        )
+        client.wait_for_completion(train_job_id)
+        client.wait_for_completion(eval_job_id)
+
+        # Create experiment config
+        config = ExperimentConfig(
+            name=experiment,
+            step_id=step_id,
+            prev_step_id=prev_step_id,
+            prev_step_type=prev_step_type,
+            field_name=field,
+            match_keys=match_keys_list,
+            truth_job_ids=truth_jobs_list,
+            mode="auto_split",
+            train_job_id=train_job_id,
+            eval_job_id=eval_job_id,
+            train_ratio=train_ratio,
+            random_seed=seed,
+            project_id=project_id,
+            model_version=model_version,
+        )
+
+        storage.create(config)
+        log_progress(
+            f"\n[green]Created experiment '{experiment}' (auto-split mode)[/green]",
+            verbosity,
+        )
+        log_progress(f"  Step ID: {step_id}", verbosity)
+        log_detail(f"  Previous Step: {prev_step_id} ({prev_step_type})", verbosity)
+        log_detail(f"  Field: {field}", verbosity)
+        log_progress(f"  Train job (for iteration): {train_job_id}", verbosity)
+        log_progress(f"  Eval job (for final eval): {eval_job_id}", verbosity)
+        log_detail(
+            f"  Split ratio: {train_ratio:.0%} train / {1 - train_ratio:.0%} eval",
+            verbosity,
+        )
+
     else:
-        # If prev_step_id provided manually, we need to get the type
-        prev_step_info = client.get_previous_step_info(truth_jobs_list[0], step_id)
-        prev_step_type = prev_step_info["type"] if prev_step_info else "mappings"
+        # ===== MANUAL MODE =====
+        # Auto-detect previous step if not provided
+        prev_step_type = None
+        if prev_step_id is None:
+            log_progress("[yellow]Auto-detecting previous step...[/yellow]", verbosity)
+            prev_step_info = client.get_previous_step_info(train_job, step_id)
 
-    # Download and concatenate source data from all truth jobs
-    log_progress("[blue]Downloading source data from truth jobs...[/blue]", verbosity)
-    all_source_rows = []
-    for job_id in truth_jobs_list:
-        log_detail(f"  Downloading from job {job_id}...", verbosity)
-        rows = client.download_job_source_data(job_id)
-        all_source_rows.extend(rows)
-        log_detail(f"    Got {len(rows)} rows", verbosity)
+            if prev_step_info is None:
+                console.print("[red]Could not auto-detect previous step.[/red]")
+                prev_step_id = click.prompt(
+                    "Please enter the previous step ID", type=int
+                )
+                prev_step_type = click.prompt(
+                    "Please enter the previous step type (e.g., 'mappings')", type=str
+                )
+            else:
+                prev_step_id = prev_step_info["id"]
+                prev_step_type = prev_step_info["type"]
+                log_progress(
+                    f"[green]Detected previous step: {prev_step_info['name']} (ID: {prev_step_id})[/green]",
+                    verbosity,
+                )
+                log_detail(f"[dim]Step type: {prev_step_type}[/dim]", verbosity)
+        else:
+            prev_step_info = client.get_previous_step_info(train_job, step_id)
+            prev_step_type = prev_step_info["type"] if prev_step_info else "mappings"
 
-    log_progress(f"[green]Total source rows: {len(all_source_rows)}[/green]", verbosity)
+        # Create experiment config
+        config = ExperimentConfig(
+            name=experiment,
+            step_id=step_id,
+            prev_step_id=prev_step_id,
+            prev_step_type=prev_step_type,
+            field_name=field,
+            match_keys=match_keys_list,
+            truth_job_ids=truth_jobs_list,
+            mode="manual",
+            train_job_id=train_job,
+            eval_job_id=eval_job,
+        )
 
-    # Shuffle and split
-    random.seed(seed)
-    random.shuffle(all_source_rows)
+        storage.create(config)
+        log_progress(
+            f"\n[green]Created experiment '{experiment}' (manual mode)[/green]",
+            verbosity,
+        )
+        log_progress(f"  Step ID: {step_id}", verbosity)
+        log_detail(f"  Previous Step: {prev_step_id} ({prev_step_type})", verbosity)
+        log_detail(f"  Field: {field}", verbosity)
+        log_progress(f"  Train job: {train_job}", verbosity)
+        if eval_job:
+            log_progress(f"  Eval job: {eval_job}", verbosity)
+        log_detail(f"  Truth jobs: {truth_jobs_list}", verbosity)
 
-    split_idx = int(len(all_source_rows) * train_ratio)
-    train_rows = all_source_rows[:split_idx]
-    eval_rows = all_source_rows[split_idx:]
-
-    log_progress(f"  Train set: {len(train_rows)} rows ({train_ratio:.0%})", verbosity)
     log_progress(
-        f"  Eval set: {len(eval_rows)} rows ({1 - train_ratio:.0%})", verbosity
-    )
-
-    # Upload files and create jobs
-    log_progress("[blue]Creating train job...[/blue]", verbosity)
-    train_file_id = client.upload_file_json(train_rows)
-    train_job_id = client.create_job(
-        name=f"{experiment}_train",
-        project_id=project_id,
-        file_id=train_file_id,
-        model_version=model_version,
-    )
-    log_progress(f"  Train job created: {train_job_id}", verbosity)
-
-    log_progress("[blue]Creating eval job...[/blue]", verbosity)
-    eval_file_id = client.upload_file_json(eval_rows)
-    eval_job_id = client.create_job(
-        name=f"{experiment}_eval",
-        project_id=project_id,
-        file_id=eval_file_id,
-        model_version=model_version,
-    )
-    log_progress(f"  Eval job created: {eval_job_id}", verbosity)
-
-    # Wait for jobs to complete initial processing
-    log_progress("[blue]Waiting for jobs to complete initial run...[/blue]", verbosity)
-    client.wait_for_completion(train_job_id)
-    client.wait_for_completion(eval_job_id)
-
-    # Create experiment config
-    config = ExperimentConfig(
-        name=experiment,
-        step_id=step_id,
-        prev_step_id=prev_step_id,
-        prev_step_type=prev_step_type,
-        field_name=field,
-        match_keys=match_keys_list,
-        truth_job_ids=truth_jobs_list,
-        mode="auto_split",
-        train_job_id=train_job_id,
-        eval_job_id=eval_job_id,
-        train_ratio=train_ratio,
-        random_seed=seed,
-        project_id=project_id,
-        model_version=model_version,
-    )
-
-    storage.create(config)
-    log_progress(
-        f"\n[green]Created experiment '{experiment}' (auto-split mode)[/green]",
-        verbosity,
-    )
-    log_progress(f"  Step ID: {step_id}", verbosity)
-    log_detail(f"  Previous Step: {prev_step_id} ({prev_step_type})", verbosity)
-    log_detail(f"  Field: {field}", verbosity)
-    log_progress(f"  Train job (for iteration): {train_job_id}", verbosity)
-    log_progress(f"  Eval job (for final eval): {eval_job_id}", verbosity)
-    log_detail(
-        f"  Split ratio: {train_ratio:.0%} train / {1 - train_ratio:.0%} eval",
-        verbosity,
-    )
-    log_progress(
-        "\n[yellow]Next step: Run 'extract-truth' to build ground truth from the jobs[/yellow]",
+        "\n[yellow]Next step: Run 'extract-truth' to build ground truth[/yellow]",
         verbosity,
     )
 
@@ -839,7 +842,7 @@ def iterate(
     help="SDM password (or SDM_PASSWORD env var)",
 )
 def final_eval(experiment: str, email: str, password: str):
-    """Run final evaluation on holdout set (auto-split mode only)."""
+    """Run final evaluation on holdout set (requires eval job)."""
     storage = ExperimentStorage(experiment)
 
     if not storage.exists():
@@ -848,9 +851,10 @@ def final_eval(experiment: str, email: str, password: str):
 
     config = storage.load_config()
 
-    if config.mode != "auto_split":
+    if not config.eval_job_id:
+        console.print("[red]Error: No eval job configured for this experiment[/red]")
         console.print(
-            "[red]Error: final-eval is only for auto-split mode experiments[/red]"
+            "[yellow]Tip: Use --eval-job when creating the experiment to enable final evaluation[/yellow]"
         )
         sys.exit(1)
 

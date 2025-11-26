@@ -23,13 +23,12 @@ class ExperimentConfig:
     field_name: str
     match_keys: list[str]
     truth_job_ids: list[str]
-    # Mode: "manual" (existing test job) or "auto_split" (create jobs from truth data)
+    # Mode: "manual" (existing jobs) or "auto_split" (create jobs from truth data)
     mode: str = "manual"
-    # For manual mode
-    test_job_id: str | None = None
-    # For auto_split mode
-    train_job_id: str | None = None  # Created job for iteration (75%)
-    eval_job_id: str | None = None  # Created job for final evaluation (25%)
+    # Train job: provided in manual mode, created in auto_split mode
+    train_job_id: str | None = None
+    # Eval job: optional in manual mode, created in auto_split mode
+    eval_job_id: str | None = None
     train_ratio: float = 0.75
     random_seed: int = 42
     project_id: int | None = None
@@ -48,10 +47,8 @@ class ExperimentConfig:
 
     @property
     def iteration_job_id(self) -> str:
-        """Get the job ID to use for iteration (test_job_id for manual, train_job_id for auto_split)."""
-        if self.mode == "auto_split":
-            return self.train_job_id
-        return self.test_job_id
+        """Get the job ID to use for iteration (train_job_id for both modes)."""
+        return self.train_job_id
 
 
 @dataclass

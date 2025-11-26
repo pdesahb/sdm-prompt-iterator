@@ -33,44 +33,36 @@ Note: make sure that your user is in the correct organization to be able ot fetc
 
 These variables can also be passed as CLI arguments if needed.
 
-## Usage Modes
-
-### Manual Mode
-
-Uses an existing test job to iterate on the prompt.
+## Quick Start
 
 ```bash
-# 1. Initialize the experiment
-python main.py init \
-  --experiment "category_optimization" \
+# Interactive mode - prompts for all required fields
+python main.py create
+
+# Or provide arguments directly
+python main.py create \
+  --experiment "category_v2" \
   --step-id 123 \
   --field category \
   --match-keys "product_name,brand" \
-  --test-job abc-123-def \
   --truth-jobs job1,job2,job3
-
-# 2. Extract ground truth
-python main.py extract-truth --experiment category_optimization
-
-# 3. Evaluate the current prompt
-python main.py evaluate --experiment category_optimization
-
-# 4. Iterate with Anthropic
-python main.py iterate --experiment category_optimization --iterations 3
 ```
+
+## Usage Modes
 
 ### Auto-Split Mode (Recommended)
 
 Automatically creates train/eval jobs from ground truth data to prevent overfitting.
 
 ```bash
-# 1. Initialize with automatic split (75% train, 25% eval)
-python main.py init-auto \
+# 1. Create experiment with automatic split (75% train, 25% eval)
+python main.py create \
   --experiment "category_v2" \
   --step-id 123 \
   --field category \
   --match-keys "product_name,brand" \
   --truth-jobs job1,job2,job3 \
+  --mode auto-split \
   --train-ratio 0.75 \
   --seed 42
 
@@ -84,10 +76,36 @@ python main.py iterate --experiment category_v2 --iterations 5
 python main.py final-eval --experiment category_v2
 ```
 
+### Manual Mode
+
+Uses existing job(s) to iterate on the prompt.
+
+```bash
+# 1. Create the experiment with existing train/eval jobs
+python main.py create \
+  --experiment "category_optimization" \
+  --step-id 123 \
+  --field category \
+  --match-keys "product_name,brand" \
+  --truth-jobs job1,job2,job3 \
+  --mode manual \
+  --train-job abc-123-def \
+  --eval-job xyz-789-ghi  # optional
+
+# 2. Extract ground truth
+python main.py extract-truth --experiment category_optimization
+
+# 3. Iterate with Anthropic
+python main.py iterate --experiment category_optimization --iterations 3
+
+# 4. Final evaluation on the eval job (if provided)
+python main.py final-eval --experiment category_optimization
+```
+
 ## Commands
 
-### `init`
-Creates a new experiment in manual mode.
+### `create`
+Creates a new experiment. Prompts interactively for missing required fields.
 
 | Option | Description |
 |--------|-------------|
@@ -98,18 +116,15 @@ Creates a new experiment in manual mode.
 | `--prev-step-id` | Previous step ID (auto-detected if omitted) |
 | `--field` | Classification field name (e.g., `category`) |
 | `--match-keys` | Columns to match rows (e.g., `product_name,brand`) |
-| `--test-job` | Test job ID |
 | `--truth-jobs` | IDs of jobs containing ground truth (comma-separated) |
-
-### `init-auto`
-Creates an experiment with automatic train/eval split.
-
-| Option | Description |
-|--------|-------------|
-| `--train-ratio` | Ratio for the train set (default: 0.75) |
-| `--seed` | Random seed for the split (default: 42) |
+| `--mode` | Experiment mode: `auto-split` (default) or `manual` |
+| `--train-job` | Train job ID (manual mode) |
+| `--eval-job` | Eval job ID (manual mode, optional) |
+| `--train-ratio` | Ratio for the train set (auto-split mode, default: 0.75) |
+| `--seed` | Random seed for the split (auto-split mode, default: 42) |
 | `-v`, `--verbosity` | Output verbosity: 0=errors, 1=progress (default), 2=detailed |
-| *(others)* | Same options as `init` except `--test-job` |
+
+**Interactive mode**: Run `python main.py create` without arguments to be prompted for each required field.
 
 ### `extract-truth`
 Extracts ground truth from validated jobs.
@@ -166,7 +181,7 @@ python main.py restore --experiment my-experiment --run-id 20251125_232541_176a1
 ```
 
 ### `final-eval`
-Final evaluation on the holdout set (auto-split mode only).
+Final evaluation on the holdout set (requires eval job).
 
 | Option | Description |
 |--------|-------------|
