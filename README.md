@@ -9,6 +9,7 @@ CLI tool to automate iteration and optimization of SDM categorization prompts.
 - **Anthropic-assisted iteration** to improve prompts
 - **Auto-split mode** to prevent overfitting (train/eval separation)
 - **Run history** to track performance evolution
+- **Prompt restoration** to rollback to previous versions
 
 ## Installation
 
@@ -107,37 +108,78 @@ Creates an experiment with automatic train/eval split.
 |--------|-------------|
 | `--train-ratio` | Ratio for the train set (default: 0.75) |
 | `--seed` | Random seed for the split (default: 42) |
+| `-v`, `--verbosity` | Output verbosity: 0=errors, 1=progress (default), 2=detailed |
 | *(others)* | Same options as `init` except `--test-job` |
 
 ### `extract-truth`
 Extracts ground truth from validated jobs.
 
-```bash
-python main.py extract-truth --experiment <name> --email <email> --password <pwd>
-```
+| Option | Description |
+|--------|-------------|
+| `--experiment` | Experiment name |
+| `--email` | SDM email (or `SDM_USER` env var) |
+| `--password` | SDM password (or `SDM_PASSWORD` env var) |
+| `-v`, `--verbosity` | Output verbosity: 0=errors, 1=progress (default), 2=detailed |
 
 ### `evaluate`
 Evaluates the current prompt against ground truth.
 
 | Option | Description |
 |--------|-------------|
+| `--experiment` | Experiment name |
+| `--email` | SDM email (or `SDM_USER` env var) |
+| `--password` | SDM password (or `SDM_PASSWORD` env var) |
 | `--skip-rerun` | Do not rerun the job, use current results |
 | `--use-eval-job` | Use the evaluation job (auto-split mode) |
+| `-v`, `--verbosity` | Output verbosity: 0=errors, 1=progress (default), 2=detailed |
 
 ### `iterate`
 Iterates on the prompt with Anthropic's help.
 
 | Option | Description |
 |--------|-------------|
+| `--experiment` | Experiment name |
+| `--email` | SDM email (or `SDM_USER` env var) |
+| `--password` | SDM password (or `SDM_PASSWORD` env var) |
 | `--anthropic-api-key` | Anthropic API key (or `ANTHROPIC_API_KEY` env var) |
 | `--iterations` | Number of iterations (default: 3) |
 | `--auto-apply` | Automatically apply suggestions |
+| `-v`, `--verbosity` | Output verbosity: 0=errors, 1=progress (default), 2=detailed |
+
+### `restore`
+Restores a prompt from a previous run and re-evaluates.
+
+| Option | Description |
+|--------|-------------|
+| `--experiment` | Experiment name |
+| `--run-id` | Run ID to restore prompt from |
+| `--email` | SDM email (or `SDM_USER` env var) |
+| `--password` | SDM password (or `SDM_PASSWORD` env var) |
+| `-v`, `--verbosity` | Output verbosity: 0=errors, 1=progress (default), 2=detailed |
+
+```bash
+# List runs to find the one to restore
+python main.py history --experiment my-experiment
+
+# Restore a specific run's prompt
+python main.py restore --experiment my-experiment --run-id 20251125_232541_176a142a
+```
 
 ### `final-eval`
 Final evaluation on the holdout set (auto-split mode only).
 
+| Option | Description |
+|--------|-------------|
+| `--experiment` | Experiment name |
+| `--email` | SDM email (or `SDM_USER` env var) |
+| `--password` | SDM password (or `SDM_PASSWORD` env var) |
+
 ### `history`
-Displays the run history of an experiment.
+Displays the run history of an experiment with prompt previews.
+
+| Option | Description |
+|--------|-------------|
+| `--experiment` | Experiment name |
 
 ```bash
 python main.py history --experiment <name>
@@ -148,6 +190,27 @@ Lists all experiments.
 
 ```bash
 python main.py list
+```
+
+## Verbosity Levels
+
+Long-running commands support a `-v` / `--verbosity` option with three levels:
+
+| Level | Description | Output |
+|-------|-------------|--------|
+| 0 | Silent | Errors only + final metrics table |
+| 1 | Normal (default) | Progress messages + stats + truncated prompt preview |
+| 2 | Detailed | Full prompts, full Anthropic analysis, API call details |
+
+```bash
+# Silent mode - just show final result
+python main.py evaluate --experiment my-exp -v 0
+
+# Normal mode (default)
+python main.py iterate --experiment my-exp
+
+# Detailed mode - show everything
+python main.py iterate --experiment my-exp -v 2
 ```
 
 ## Metrics

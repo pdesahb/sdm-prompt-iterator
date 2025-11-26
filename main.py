@@ -38,12 +38,30 @@ from storage import (
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 console = Console()
+
+
+# ===== VERBOSITY HELPERS =====
+
+
+def log_progress(msg: str, verbosity: int, min_level: int = 1) -> None:
+    """Print message if verbosity >= min_level."""
+    if verbosity >= min_level:
+        console.print(msg)
+
+
+def log_detail(msg: str, verbosity: int) -> None:
+    """Print detailed message (level 2 only)."""
+    if verbosity >= 2:
+        console.print(msg)
+
+
+# ===== CLIENT HELPER =====
 
 
 def get_client(email: str, password: str) -> SDMClient:
@@ -201,6 +219,13 @@ def init(
     type=int,
     help="Random seed for split (default: 42)",
 )
+@click.option(
+    "-v",
+    "--verbosity",
+    default=1,
+    type=click.IntRange(0, 2),
+    help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
+)
 def init_auto(
     experiment: str,
     email: str,
@@ -212,6 +237,7 @@ def init_auto(
     truth_jobs: str,
     train_ratio: float,
     seed: int,
+    verbosity: int,
 ):
     """Initialize experiment with auto-split mode (creates train/eval jobs from truth data)."""
     storage = ExperimentStorage(experiment)
@@ -227,16 +253,16 @@ def init_auto(
     client = get_client(email, password)
 
     # Get project info from first truth job
-    console.print("[blue]Getting project info from truth jobs...[/blue]")
+    log_progress("[blue]Getting project info from truth jobs...[/blue]", verbosity)
     project_info = client.get_project_info_from_job(truth_jobs_list[0])
     project_id = project_info["project_id"]
     model_version = project_info["model_version"]
-    console.print(f"  Project ID: {project_id}, Model version: {model_version}")
+    log_detail(f"  Project ID: {project_id}, Model version: {model_version}", verbosity)
 
     # Auto-detect previous step if not provided
     prev_step_type = None
     if prev_step_id is None:
-        console.print("[yellow]Auto-detecting previous step...[/yellow]")
+        log_progress("[yellow]Auto-detecting previous step...[/yellow]", verbosity)
         prev_step_info = client.get_previous_step_info(truth_jobs_list[0], step_id)
 
         if prev_step_info is None:
@@ -248,24 +274,26 @@ def init_auto(
         else:
             prev_step_id = prev_step_info["id"]
             prev_step_type = prev_step_info["type"]
-            console.print(
-                f"[green]Detected previous step: {prev_step_info['name']} (ID: {prev_step_id}, type: {prev_step_type})[/green]"
+            log_progress(
+                f"[green]Detected previous step: {prev_step_info['name']} (ID: {prev_step_id})[/green]",
+                verbosity,
             )
+            log_detail(f"[dim]Step type: {prev_step_type}[/dim]", verbosity)
     else:
         # If prev_step_id provided manually, we need to get the type
         prev_step_info = client.get_previous_step_info(truth_jobs_list[0], step_id)
         prev_step_type = prev_step_info["type"] if prev_step_info else "mappings"
 
     # Download and concatenate source data from all truth jobs
-    console.print("[blue]Downloading source data from truth jobs...[/blue]")
+    log_progress("[blue]Downloading source data from truth jobs...[/blue]", verbosity)
     all_source_rows = []
     for job_id in truth_jobs_list:
-        console.print(f"  Downloading from job {job_id}...")
+        log_detail(f"  Downloading from job {job_id}...", verbosity)
         rows = client.download_job_source_data(job_id)
         all_source_rows.extend(rows)
-        console.print(f"    Got {len(rows)} rows")
+        log_detail(f"    Got {len(rows)} rows", verbosity)
 
-    console.print(f"[green]Total source rows: {len(all_source_rows)}[/green]")
+    log_progress(f"[green]Total source rows: {len(all_source_rows)}[/green]", verbosity)
 
     # Shuffle and split
     random.seed(seed)
@@ -275,11 +303,13 @@ def init_auto(
     train_rows = all_source_rows[:split_idx]
     eval_rows = all_source_rows[split_idx:]
 
-    console.print(f"  Train set: {len(train_rows)} rows ({train_ratio:.0%})")
-    console.print(f"  Eval set: {len(eval_rows)} rows ({1 - train_ratio:.0%})")
+    log_progress(f"  Train set: {len(train_rows)} rows ({train_ratio:.0%})", verbosity)
+    log_progress(
+        f"  Eval set: {len(eval_rows)} rows ({1 - train_ratio:.0%})", verbosity
+    )
 
     # Upload files and create jobs
-    console.print("[blue]Creating train job...[/blue]")
+    log_progress("[blue]Creating train job...[/blue]", verbosity)
     train_file_id = client.upload_file_json(train_rows)
     train_job_id = client.create_job(
         name=f"{experiment}_train",
@@ -287,9 +317,9 @@ def init_auto(
         file_id=train_file_id,
         model_version=model_version,
     )
-    console.print(f"  Train job created: {train_job_id}")
+    log_progress(f"  Train job created: {train_job_id}", verbosity)
 
-    console.print("[blue]Creating eval job...[/blue]")
+    log_progress("[blue]Creating eval job...[/blue]", verbosity)
     eval_file_id = client.upload_file_json(eval_rows)
     eval_job_id = client.create_job(
         name=f"{experiment}_eval",
@@ -297,10 +327,10 @@ def init_auto(
         file_id=eval_file_id,
         model_version=model_version,
     )
-    console.print(f"  Eval job created: {eval_job_id}")
+    log_progress(f"  Eval job created: {eval_job_id}", verbosity)
 
     # Wait for jobs to complete initial processing
-    console.print("[blue]Waiting for jobs to complete initial run...[/blue]")
+    log_progress("[blue]Waiting for jobs to complete initial run...[/blue]", verbosity)
     client.wait_for_completion(train_job_id)
     client.wait_for_completion(eval_job_id)
 
@@ -323,19 +353,22 @@ def init_auto(
     )
 
     storage.create(config)
-    console.print(
-        f"\n[green]Created experiment '{experiment}' (auto-split mode)[/green]"
+    log_progress(
+        f"\n[green]Created experiment '{experiment}' (auto-split mode)[/green]",
+        verbosity,
     )
-    console.print(f"  Step ID: {step_id}")
-    console.print(f"  Previous Step: {prev_step_id} ({prev_step_type})")
-    console.print(f"  Field: {field}")
-    console.print(f"  Train job (for iteration): {train_job_id}")
-    console.print(f"  Eval job (for final eval): {eval_job_id}")
-    console.print(
-        f"  Split ratio: {train_ratio:.0%} train / {1 - train_ratio:.0%} eval"
+    log_progress(f"  Step ID: {step_id}", verbosity)
+    log_detail(f"  Previous Step: {prev_step_id} ({prev_step_type})", verbosity)
+    log_detail(f"  Field: {field}", verbosity)
+    log_progress(f"  Train job (for iteration): {train_job_id}", verbosity)
+    log_progress(f"  Eval job (for final eval): {eval_job_id}", verbosity)
+    log_detail(
+        f"  Split ratio: {train_ratio:.0%} train / {1 - train_ratio:.0%} eval",
+        verbosity,
     )
-    console.print(
-        "\n[yellow]Next step: Run 'extract-truth' to build ground truth from the jobs[/yellow]"
+    log_progress(
+        "\n[yellow]Next step: Run 'extract-truth' to build ground truth from the jobs[/yellow]",
+        verbosity,
     )
 
 
@@ -353,7 +386,14 @@ def init_auto(
     required=True,
     help="SDM password (or SDM_PASSWORD env var)",
 )
-def extract_truth(experiment: str, email: str, password: str):
+@click.option(
+    "-v",
+    "--verbosity",
+    default=1,
+    type=click.IntRange(0, 2),
+    help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
+)
+def extract_truth(experiment: str, email: str, password: str, verbosity: int):
     """Extract ground truth from validation jobs."""
     storage = ExperimentStorage(experiment)
 
@@ -369,7 +409,7 @@ def extract_truth(experiment: str, email: str, password: str):
     category_column = f"{config.field_name}{CATEGORY_SUFFIX}"
 
     for job_id in config.truth_job_ids:
-        console.print(f"[blue]Extracting from job {job_id}...[/blue]")
+        log_progress(f"[blue]Extracting from job {job_id}...[/blue]", verbosity)
 
         # Get classification results with labels, filtered by validated/corrected status
         results, labels = client.get_classification_results(
@@ -379,12 +419,12 @@ def extract_truth(experiment: str, email: str, password: str):
             include_labels=True,
         )
 
-        console.print(f"  Found {len(results)} validated rows")
+        log_progress(f"  Found {len(results)} validated rows", verbosity)
 
         # Build code-to-label mapping from this job
         job_code_to_label = _build_code_to_label_map(results, labels, category_column)
         all_code_to_label.update(job_code_to_label)
-        console.print(f"  Extracted {len(job_code_to_label)} category labels")
+        log_detail(f"  Extracted {len(job_code_to_label)} category labels", verbosity)
 
         for row in results:
             # Build match key
@@ -421,11 +461,13 @@ def extract_truth(experiment: str, email: str, password: str):
     )
 
     storage.save_ground_truth(ground_truth)
-    console.print(
-        f"[green]Saved ground truth with {len(unique_rows)} unique rows[/green]"
+    log_progress(
+        f"[green]Saved ground truth with {len(unique_rows)} unique rows[/green]",
+        verbosity,
     )
-    console.print(
-        f"[green]Saved {len(all_code_to_label)} category code-to-label mappings[/green]"
+    log_detail(
+        f"[green]Saved {len(all_code_to_label)} category code-to-label mappings[/green]",
+        verbosity,
     )
 
 
@@ -449,8 +491,20 @@ def extract_truth(experiment: str, email: str, password: str):
     is_flag=True,
     help="For auto-split mode: use eval job instead of train job",
 )
+@click.option(
+    "-v",
+    "--verbosity",
+    default=1,
+    type=click.IntRange(0, 2),
+    help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
+)
 def evaluate(
-    experiment: str, email: str, password: str, skip_rerun: bool, use_eval_job: bool
+    experiment: str,
+    email: str,
+    password: str,
+    skip_rerun: bool,
+    use_eval_job: bool,
+    verbosity: int,
 ):
     """Evaluate current prompt against ground truth."""
     storage = ExperimentStorage(experiment)
@@ -472,12 +526,15 @@ def evaluate(
     # Determine which job to use
     if config.mode == "auto_split" and use_eval_job:
         job_id = config.eval_job_id
-        console.print("[cyan]Using EVAL job for evaluation (holdout set)[/cyan]")
+        log_progress(
+            "[cyan]Using EVAL job for evaluation (holdout set)[/cyan]", verbosity
+        )
     else:
         job_id = config.iteration_job_id
         if config.mode == "auto_split":
-            console.print(
-                "[cyan]Using TRAIN job for evaluation (use --use-eval-job for final eval)[/cyan]"
+            log_progress(
+                "[cyan]Using TRAIN job for evaluation (use --use-eval-job for final eval)[/cyan]",
+                verbosity,
             )
 
     # Get current prompt
@@ -490,24 +547,27 @@ def evaluate(
 
     if not skip_rerun:
         # Return to previous step and re-run classification
-        console.print(
-            f"[blue]Returning job {job_id} to step {config.prev_step_id}...[/blue]"
+        log_progress(
+            f"[blue]Returning job to step {config.prev_step_id}...[/blue]", verbosity
         )
+        log_detail(f"[dim]Job ID: {job_id}[/dim]", verbosity)
         client.return_to_step(job_id, config.prev_step_id, reset=True)
 
         # Wait for previous step to be ready for validation
-        console.print(
-            f"[blue]Waiting for step {config.prev_step_id} to be ready...[/blue]"
+        log_progress(
+            f"[blue]Waiting for step {config.prev_step_id} to be ready...[/blue]",
+            verbosity,
         )
         client.wait_for_completion(job_id, target_step_id=config.prev_step_id)
 
         # Validate the previous step to move forward to classification
-        console.print(
-            f"[blue]Validating step {config.prev_step_id} ({config.prev_step_type})...[/blue]"
+        log_progress(
+            f"[blue]Validating step {config.prev_step_id}...[/blue]", verbosity
         )
+        log_detail(f"[dim]Step type: {config.prev_step_type}[/dim]", verbosity)
         client.validate_step(job_id, config.prev_step_id, config.prev_step_type)
 
-        console.print("[blue]Waiting for job completion...[/blue]")
+        log_progress("[blue]Waiting for job completion...[/blue]", verbosity)
         success = client.wait_for_completion(job_id)
 
         if not success:
@@ -515,7 +575,7 @@ def evaluate(
             sys.exit(1)
 
     # Get prediction results
-    console.print("[blue]Fetching classification results...[/blue]")
+    log_progress("[blue]Fetching classification results...[/blue]", verbosity)
     predictions = client.get_classification_results(
         action_id=config.step_id,
         job_id=job_id,
@@ -535,7 +595,7 @@ def evaluate(
 
     # Display results
     eval_type = "EVAL (holdout)" if use_eval_job else "TRAIN"
-    _display_metrics(metrics, current_prompt, eval_type=eval_type)
+    _display_metrics(metrics, current_prompt, eval_type=eval_type, verbosity=verbosity)
 
     # Save run
     run_id = generate_run_id()
@@ -548,7 +608,7 @@ def evaluate(
     )
     storage.save_run(run_result)
 
-    console.print(f"\n[green]Run saved: {run_id}[/green]")
+    log_progress(f"\n[green]Run saved: {run_id}[/green]", verbosity)
 
 
 # ===== ITERATE =====
@@ -577,6 +637,13 @@ def evaluate(
     is_flag=True,
     help="Auto-apply suggested prompts without confirmation",
 )
+@click.option(
+    "-v",
+    "--verbosity",
+    default=1,
+    type=click.IntRange(0, 2),
+    help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
+)
 def iterate(
     experiment: str,
     email: str,
@@ -584,6 +651,7 @@ def iterate(
     anthropic_api_key: str,
     iterations: int,
     auto_apply: bool,
+    verbosity: int,
 ):
     """Iterate on prompt with Anthropic's suggestions (uses train job in auto-split mode)."""
     storage = ExperimentStorage(experiment)
@@ -609,16 +677,19 @@ def iterate(
     job_id = config.iteration_job_id
 
     if config.mode == "auto_split":
-        console.print(
-            f"[cyan]Auto-split mode: iterating on TRAIN job ({job_id})[/cyan]"
+        log_progress(
+            f"[cyan]Auto-split mode: iterating on TRAIN job ({job_id})[/cyan]",
+            verbosity,
         )
-        console.print(
-            "[cyan]After iteration, run 'evaluate --use-eval-job' for final evaluation on holdout set[/cyan]\n"
+        log_progress(
+            "[cyan]After iteration, run 'evaluate --use-eval-job' for final evaluation on holdout set[/cyan]\n",
+            verbosity,
         )
 
     for i in range(iterations):
-        console.print(
-            f"\n[bold cyan]═══ Iteration {i + 1}/{iterations} ═══[/bold cyan]"
+        log_progress(
+            f"\n[bold cyan]═══ Iteration {i + 1}/{iterations} ═══[/bold cyan]",
+            verbosity,
         )
 
         # 1. Get current prompt and classification results
@@ -629,7 +700,7 @@ def iterate(
             .get("custom_prompt", "")
         )
 
-        console.print("[blue]Fetching classification results...[/blue]")
+        log_progress("[blue]Fetching classification results...[/blue]", verbosity)
         predictions = client.get_classification_results(
             action_id=config.step_id,
             job_id=job_id,
@@ -647,18 +718,39 @@ def iterate(
         metrics = evaluator.compare(gt_rows, predictions)
         errors = evaluator.get_errors(gt_rows, predictions)
 
-        _display_metrics(metrics, current_prompt)
+        _display_metrics(metrics, current_prompt, verbosity=verbosity)
 
         # 3. Get Anthropic's analysis and suggestion
-        console.print("\n[blue]Analyzing errors with Anthropic...[/blue]")
+        log_progress("\n[blue]Analyzing errors with Anthropic...[/blue]", verbosity)
         metrics_dict = {k: v.to_dict() for k, v in metrics.items()}
         result = advisor.iterate(current_prompt, errors, metrics_dict)
 
-        console.print("\n[bold]Error Analysis:[/bold]")
-        console.print(result["analysis"])
+        # Level 1: show summary
+        log_progress("\n[bold]Error Analysis:[/bold]", verbosity)
+        if verbosity >= 2:
+            console.print(result["analysis"])
+        elif verbosity >= 1:
+            # Show first 200 chars of analysis
+            analysis_preview = (
+                result["analysis"][:200] + "..."
+                if len(result["analysis"]) > 200
+                else result["analysis"]
+            )
+            console.print(analysis_preview)
 
-        console.print("\n[bold]Suggested Prompt:[/bold]")
-        console.print(f"[italic]{result['suggested_prompt']}[/italic]")
+        # Level 2: show full suggested prompt
+        log_progress("\n[bold]Suggested Prompt:[/bold]", verbosity)
+        if verbosity >= 2:
+            console.print("─" * 40)
+            console.print(result["suggested_prompt"])
+            console.print("─" * 40)
+        elif verbosity >= 1:
+            prompt_preview = (
+                result["suggested_prompt"][:100] + "..."
+                if len(result["suggested_prompt"]) > 100
+                else result["suggested_prompt"]
+            )
+            console.print(f"[italic]{prompt_preview}[/italic]")
 
         # Save run
         run_id = generate_run_id()
@@ -679,34 +771,39 @@ def iterate(
                 "\nApply suggested prompt and re-run?", default=True
             ):
                 # Update prompt
-                console.print("[blue]Updating prompt...[/blue]")
+                log_progress("[blue]Updating prompt...[/blue]", verbosity)
                 client.update_prompt(
                     config.step_id, config.field_name, result["suggested_prompt"]
                 )
-                console.print("[green]Prompt updated[/green]")
+                log_progress("[green]Prompt updated[/green]", verbosity)
 
                 # Return to previous step
-                console.print(
-                    f"[blue]Returning to step {config.prev_step_id} to re-run classification...[/blue]"
+                log_progress(
+                    f"[blue]Returning to step {config.prev_step_id} to re-run classification...[/blue]",
+                    verbosity,
                 )
                 client.return_to_step(job_id, config.prev_step_id, reset=True)
 
                 # Wait for previous step to be ready for validation
-                console.print(
-                    f"[blue]Waiting for step {config.prev_step_id} to be ready...[/blue]"
+                log_progress(
+                    f"[blue]Waiting for step {config.prev_step_id} to be ready...[/blue]",
+                    verbosity,
                 )
                 client.wait_for_completion(job_id, target_step_id=config.prev_step_id)
 
                 # Validate the previous step to move forward to classification
-                console.print(
-                    f"[blue]Validating step {config.prev_step_id} ({config.prev_step_type})...[/blue]"
+                log_progress(
+                    f"[blue]Validating step {config.prev_step_id}...[/blue]", verbosity
                 )
+                log_detail(f"[dim]Step type: {config.prev_step_type}[/dim]", verbosity)
                 client.validate_step(job_id, config.prev_step_id, config.prev_step_type)
 
                 # Wait for classification to complete
-                console.print(
-                    f"[blue]Waiting for job to reach classification step {config.step_id}...[/blue]"
+                log_progress(
+                    "[blue]Waiting for job to reach classification step...[/blue]",
+                    verbosity,
                 )
+                log_detail(f"[dim]Target step ID: {config.step_id}[/dim]", verbosity)
                 success = client.wait_for_completion(
                     job_id, target_step_id=config.step_id
                 )
@@ -715,14 +812,15 @@ def iterate(
                     console.print("[red]Job failed or timed out[/red]")
                     break
             else:
-                console.print("[yellow]Stopping iteration[/yellow]")
+                log_progress("[yellow]Stopping iteration[/yellow]", verbosity)
                 break
 
-    console.print("\n[green]Iteration complete![/green]")
+    log_progress("\n[green]Iteration complete![/green]", verbosity)
 
     if config.mode == "auto_split":
-        console.print(
-            "\n[yellow]Tip: Run 'evaluate --use-eval-job' to evaluate on the holdout set[/yellow]"
+        log_progress(
+            "\n[yellow]Tip: Run 'evaluate --use-eval-job' to evaluate on the holdout set[/yellow]",
+            verbosity,
         )
 
 
@@ -778,6 +876,147 @@ def final_eval(experiment: str, email: str, password: str):
     console.print(result.output)
 
 
+# ===== RESTORE =====
+
+
+@cli.command()
+@click.option("--experiment", required=True, help="Experiment name")
+@click.option("--run-id", required=True, help="Run ID to restore prompt from")
+@click.option(
+    "--email", envvar="SDM_USER", required=True, help="SDM email (or SDM_USER env var)"
+)
+@click.option(
+    "--password",
+    envvar="SDM_PASSWORD",
+    required=True,
+    help="SDM password (or SDM_PASSWORD env var)",
+)
+@click.option(
+    "-v",
+    "--verbosity",
+    default=1,
+    type=click.IntRange(0, 2),
+    help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
+)
+def restore(experiment: str, run_id: str, email: str, password: str, verbosity: int):
+    """Restore a prompt from a previous run and re-evaluate."""
+    storage = ExperimentStorage(experiment)
+
+    if not storage.exists():
+        console.print(f"[red]Error: Experiment '{experiment}' not found[/red]")
+        sys.exit(1)
+
+    if not storage.has_ground_truth():
+        console.print(
+            "[red]Error: Ground truth not found. Run 'extract-truth' first.[/red]"
+        )
+        sys.exit(1)
+
+    # Load the run to restore
+    try:
+        old_run = storage.load_run(run_id)
+    except FileNotFoundError:
+        console.print(f"[red]Error: Run '{run_id}' not found[/red]")
+        sys.exit(1)
+
+    config = storage.load_config()
+    ground_truth = storage.load_ground_truth()
+
+    # Display prompt preview and original metrics (always show for confirmation)
+    prompt_preview = (
+        old_run.prompt[:200] + "..." if len(old_run.prompt) > 200 else old_run.prompt
+    )
+    console.print(f"\n[bold]Restoring prompt from run:[/bold] {run_id}")
+    console.print(f"\n[bold]Prompt preview:[/bold]\n{prompt_preview}")
+
+    if verbosity >= 2:
+        console.print("\n[bold]Full Prompt:[/bold]")
+        console.print("─" * 40)
+        console.print(old_run.prompt)
+        console.print("─" * 40)
+
+    if old_run.metrics:
+        all_metrics = old_run.metrics.get("all")
+        if all_metrics:
+            console.print(
+                f"\n[bold]Original metrics:[/bold] Accuracy: {all_metrics.accuracy:.1%}, Coverage: {all_metrics.coverage:.1%}"
+            )
+
+    if not click.confirm(
+        "\nRestore this prompt and re-run classification?", default=True
+    ):
+        console.print("[yellow]Cancelled[/yellow]")
+        return
+
+    client = get_client(email, password)
+    job_id = config.iteration_job_id
+
+    # Apply the restored prompt to SDM
+    log_progress("\n[blue]Updating prompt in SDM...[/blue]", verbosity)
+    client.update_prompt(config.step_id, config.field_name, old_run.prompt)
+    log_progress("[green]Prompt restored[/green]", verbosity)
+
+    # Re-run the job (same pattern as evaluate command)
+    log_progress(
+        f"[blue]Returning job to step {config.prev_step_id}...[/blue]", verbosity
+    )
+    log_detail(f"[dim]Job ID: {job_id}[/dim]", verbosity)
+    client.return_to_step(job_id, config.prev_step_id, reset=True)
+
+    log_progress(
+        f"[blue]Waiting for step {config.prev_step_id} to be ready...[/blue]", verbosity
+    )
+    client.wait_for_completion(job_id, target_step_id=config.prev_step_id)
+
+    log_progress(f"[blue]Validating step {config.prev_step_id}...[/blue]", verbosity)
+    log_detail(f"[dim]Step type: {config.prev_step_type}[/dim]", verbosity)
+    client.validate_step(job_id, config.prev_step_id, config.prev_step_type)
+
+    log_progress("[blue]Waiting for classification to complete...[/blue]", verbosity)
+    success = client.wait_for_completion(job_id)
+
+    if not success:
+        console.print("[red]Job failed or timed out[/red]")
+        sys.exit(1)
+
+    # Get and display new results
+    log_progress("[blue]Fetching classification results...[/blue]", verbosity)
+    predictions = client.get_classification_results(
+        action_id=config.step_id,
+        job_id=job_id,
+    )
+
+    evaluator = Evaluator(match_keys=config.match_keys, field_name=config.field_name)
+    gt_rows = [
+        {"categories": r.categories, **r.match_key, **r.source_data}
+        for r in ground_truth.rows
+    ]
+
+    metrics = evaluator.compare(gt_rows, predictions)
+    errors = evaluator.get_errors(gt_rows, predictions)
+
+    _display_metrics(
+        metrics,
+        old_run.prompt,
+        eval_type=f"RESTORED from {run_id}",
+        verbosity=verbosity,
+    )
+
+    # Save as new run
+    new_run_id = generate_run_id()
+    run_result = RunResult(
+        run_id=new_run_id,
+        timestamp=datetime.now(UTC).isoformat(),
+        prompt=old_run.prompt,
+        metrics={k: v for k, v in metrics.items()},
+        errors_sample=errors[:50],
+    )
+    storage.save_run(run_result)
+
+    log_progress(f"\n[green]Run saved: {new_run_id}[/green]", verbosity)
+    log_progress(f"[green]Prompt restored from: {run_id}[/green]", verbosity)
+
+
 # ===== HISTORY & LIST =====
 
 
@@ -803,11 +1042,17 @@ def history(experiment: str):
     table.add_column("Coverage (all)", justify="right")
     table.add_column("Accuracy (auto)", justify="right")
     table.add_column("Has Anthropic", justify="center")
+    table.add_column("Prompt Preview", max_width=40)
 
     for run_id in runs:
         run = storage.load_run(run_id)
         all_metrics = run.metrics.get("all")
         auto_metrics = run.metrics.get("automated")
+
+        # Create prompt preview (first 40 chars, single line)
+        prompt_preview = run.prompt.replace("\n", " ")[:40] if run.prompt else ""
+        if len(run.prompt) > 40:
+            prompt_preview += "..."
 
         table.add_row(
             run_id,
@@ -815,6 +1060,7 @@ def history(experiment: str):
             f"{all_metrics.coverage:.1%}" if all_metrics else "-",
             f"{auto_metrics.accuracy:.1%}" if auto_metrics else "-",
             "✓" if run.anthropic_analysis else "",
+            prompt_preview,
         )
 
     console.print(table)
@@ -944,11 +1190,23 @@ def _build_code_to_label_map(
     return code_to_label
 
 
-def _display_metrics(metrics: dict, prompt: str, eval_type: str = ""):
+def _display_metrics(
+    metrics: dict, prompt: str, eval_type: str = "", verbosity: int = 1
+):
     """Display metrics in a formatted table."""
-    prompt_display = f"{prompt[:100]}..." if len(prompt) > 100 else prompt
-    console.print(f"\n[bold]Current Prompt:[/bold] {prompt_display}")
+    # Level 1: truncated prompt preview
+    if verbosity >= 1:
+        prompt_display = f"{prompt[:100]}..." if len(prompt) > 100 else prompt
+        console.print(f"\n[bold]Current Prompt:[/bold] {prompt_display}")
 
+    # Level 2: full prompt
+    if verbosity >= 2:
+        console.print("\n[bold]Full Prompt:[/bold]")
+        console.print("─" * 40)
+        console.print(prompt)
+        console.print("─" * 40)
+
+    # Always show metrics table (even at level 0)
     title = f"Evaluation Metrics ({eval_type})" if eval_type else "Evaluation Metrics"
     table = Table(title=title)
     table.add_column("Subset", style="cyan")
