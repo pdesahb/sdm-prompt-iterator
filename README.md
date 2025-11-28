@@ -4,12 +4,13 @@ CLI tool to automate iteration and optimization of SDM categorization prompts.
 
 ## Features
 
-- **Ground truth extraction** from human-validated jobs
+- **Automatic ground truth extraction** during experiment setup
 - **Automatic prompt evaluation** with metrics (accuracy, coverage)
 - **Anthropic-assisted iteration** to improve prompts
 - **Auto-split mode** to prevent overfitting (train/eval separation)
 - **Run history** to track performance evolution
 - **Prompt restoration** to rollback to previous versions
+- **Job step validation** with helpful error messages
 
 ## Installation
 
@@ -56,6 +57,7 @@ Automatically creates train/eval jobs from ground truth data to prevent overfitt
 
 ```bash
 # 1. Create experiment with automatic split (75% train, 25% eval)
+#    Ground truth is automatically extracted during setup
 python main.py create \
   --experiment "category_v2" \
   --step-id 123 \
@@ -66,13 +68,10 @@ python main.py create \
   --train-ratio 0.75 \
   --seed 42
 
-# 2. Extract ground truth
-python main.py extract-truth --experiment category_v2
-
-# 3. Iterate on the train job
+# 2. Iterate on the train job
 python main.py iterate --experiment category_v2 --iterations 5
 
-# 4. Final evaluation on the holdout set
+# 3. Final evaluation on the holdout set
 python main.py final-eval --experiment category_v2
 ```
 
@@ -82,6 +81,7 @@ Uses existing job(s) to iterate on the prompt.
 
 ```bash
 # 1. Create the experiment with existing train/eval jobs
+#    Ground truth is automatically extracted during setup
 python main.py create \
   --experiment "category_optimization" \
   --step-id 123 \
@@ -92,20 +92,17 @@ python main.py create \
   --train-job abc-123-def \
   --eval-job xyz-789-ghi  # optional
 
-# 2. Extract ground truth
-python main.py extract-truth --experiment category_optimization
-
-# 3. Iterate with Anthropic
+# 2. Iterate with Anthropic
 python main.py iterate --experiment category_optimization --iterations 3
 
-# 4. Final evaluation on the eval job (if provided)
+# 3. Final evaluation on the eval job (if provided)
 python main.py final-eval --experiment category_optimization
 ```
 
 ## Commands
 
 ### `create`
-Creates a new experiment. Prompts interactively for missing required fields.
+Creates a new experiment and automatically extracts ground truth. Prompts interactively for missing required fields.
 
 | Option | Description |
 |--------|-------------|
@@ -127,7 +124,7 @@ Creates a new experiment. Prompts interactively for missing required fields.
 **Interactive mode**: Run `python main.py create` without arguments to be prompted for each required field.
 
 ### `extract-truth`
-Extracts ground truth from validated jobs.
+Re-extracts ground truth from validated jobs. This is automatically done during `create`, but can be run again if the source jobs have been updated.
 
 | Option | Description |
 |--------|-------------|
@@ -287,10 +284,25 @@ sdm-prompt-iterator/
 ## Recommended Workflow
 
 1. **Collect validated jobs**: Have multiple jobs where a human has validated/corrected the classifications
-2. **Use auto-split mode**: Prevents overfitting by separating train and eval
+2. **Create experiment with auto-split**: Prevents overfitting by separating train and eval (ground truth is extracted automatically)
 3. **Iterate 3-5 times**: Let Anthropic analyze errors and suggest improvements
 4. **Evaluate on holdout**: Verify that improvements generalize well
 5. **Keep history**: Compare performance between runs
+
+## Job Step Validation
+
+The `iterate` and `evaluate` commands check that your job is at the classification step before attempting to fetch results. If the job hasn't reached the classification step yet, you'll see a helpful error message:
+
+```
+Error: Job abc123 is not at the classification step yet.
+  Current step: Mapping (step 2)
+  Required step: Classification (step 4)
+  Job status: PENDING
+
+Please advance the job to the classification step in SDM before running this command.
+```
+
+This prevents confusing 404 errors when the job hasn't been processed through the pipeline yet.
 
 ## Notes
 
@@ -299,3 +311,4 @@ sdm-prompt-iterator/
 - Credentials are read from environment variables (`SDM_USER`, `SDM_PASSWORD`, `ANTHROPIC_API_KEY`) or the `.env` file
 - The Anthropic API key is optional (evaluation-only mode is possible)
 - The `--prev-step-id` field is auto-detected if not provided
+- Ground truth is automatically extracted during experiment creation

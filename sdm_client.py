@@ -191,6 +191,70 @@ class SDMClient:
         info = self.get_previous_step_info(job_id, current_step_id)
         return info.get("id") if info else None
 
+    def get_job_step_info(self, job_id: str) -> dict:
+        """Get current step information for a job.
+
+        Returns dict with:
+            - current_step_id: Current step ID
+            - current_step_name: Current step name
+            - current_step_number: Current step number in the pipeline
+            - status: Job status (RUNNING, PENDING, DONE, ERROR)
+        """
+        job_details = self.get_job_details(job_id)
+        step = job_details.get("step", {})
+        return {
+            "current_step_id": step.get("id"),
+            "current_step_name": step.get("name", "unknown"),
+            "current_step_number": step.get("number"),
+            "status": job_details.get("status", "unknown"),
+        }
+
+    def is_job_at_or_past_step(self, job_id: str, target_step_id: int) -> dict:
+        """Check if a job is at or past a specific step.
+
+        Returns dict with:
+            - is_at_or_past: True if job is at or past the target step
+            - current_step_id: Current step ID
+            - current_step_name: Current step name
+            - current_step_number: Current step number
+            - target_step_number: Target step number
+            - status: Job status
+        """
+        job_details = self.get_job_details(job_id)
+        current_step = job_details.get("step", {})
+        current_step_id = current_step.get("id")
+        current_step_number = current_step.get("number")
+        status = job_details.get("status", "unknown")
+
+        # Get project steps to find target step number
+        project_field = job_details.get("project")
+        if isinstance(project_field, dict):
+            project_id = project_field.get("id")
+        else:
+            project_id = project_field
+
+        target_step_number = None
+        if project_id:
+            steps = self.get_project_steps(project_id)
+            for step in steps:
+                if step.get("id") == target_step_id:
+                    target_step_number = step.get("number")
+                    break
+
+        # Determine if at or past target
+        is_at_or_past = False
+        if current_step_number is not None and target_step_number is not None:
+            is_at_or_past = current_step_number >= target_step_number
+
+        return {
+            "is_at_or_past": is_at_or_past,
+            "current_step_id": current_step_id,
+            "current_step_name": current_step.get("name", "unknown"),
+            "current_step_number": current_step_number,
+            "target_step_number": target_step_number,
+            "status": status,
+        }
+
     def get_classification_results(
         self,
         action_id: int,

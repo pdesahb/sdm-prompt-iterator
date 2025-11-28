@@ -71,6 +71,39 @@ def get_client(email: str, password: str) -> SDMClient:
     return client
 
 
+def check_job_at_classification_step(
+    client: SDMClient, job_id: str, step_id: int, verbosity: int
+) -> bool:
+    """Check if job is at or past the classification step.
+
+    Returns True if the job is ready, False if not (with user-friendly error message).
+    """
+    step_info = client.is_job_at_or_past_step(job_id, step_id)
+
+    if not step_info["is_at_or_past"]:
+        console.print(
+            f"\n[red]Error: Job {job_id} is not at the classification step yet.[/red]"
+        )
+        console.print(
+            f"  Current step: [yellow]{step_info['current_step_name']}[/yellow] "
+            f"(step {step_info['current_step_number']})"
+        )
+        console.print(
+            f"  Required step: Classification (step {step_info['target_step_number']})"
+        )
+        console.print(f"  Job status: {step_info['status']}")
+        console.print(
+            "\n[yellow]Please advance the job to the classification step in SDM before running this command.[/yellow]"
+        )
+        return False
+
+    log_detail(
+        f"[dim]Job {job_id} is at step: {step_info['current_step_name']}[/dim]",
+        verbosity,
+    )
+    return True
+
+
 @click.group()
 def cli():
     """SDM Prompt Iterator - Automate classification prompt optimization."""
@@ -369,8 +402,12 @@ def create(
             log_progress(f"  Eval job: {eval_job}", verbosity)
         log_detail(f"  Truth jobs: {truth_jobs_list}", verbosity)
 
+    # Extract ground truth from truth jobs
+    log_progress("\n[blue]Extracting ground truth from truth jobs...[/blue]", verbosity)
+    _extract_ground_truth(storage, config, client, verbosity)
+
     log_progress(
-        "\n[yellow]Next step: Run 'extract-truth' to build ground truth[/yellow]",
+        "\n[yellow]Next step: Run 'iterate' or 'evaluate' to start optimizing[/yellow]",
         verbosity,
     )
 
@@ -378,35 +415,13 @@ def create(
 # ===== EXTRACT GROUND TRUTH =====
 
 
-@cli.command("extract-truth")
-@click.option("--experiment", required=True, help="Experiment name")
-@click.option(
-    "--email", envvar="SDM_USER", required=True, help="SDM email (or SDM_USER env var)"
-)
-@click.option(
-    "--password",
-    envvar="SDM_PASSWORD",
-    required=True,
-    help="SDM password (or SDM_PASSWORD env var)",
-)
-@click.option(
-    "-v",
-    "--verbosity",
-    default=1,
-    type=click.IntRange(0, 2),
-    help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
-)
-def extract_truth(experiment: str, email: str, password: str, verbosity: int):
-    """Extract ground truth from validation jobs."""
-    storage = ExperimentStorage(experiment)
-
-    if not storage.exists():
-        console.print(f"[red]Error: Experiment '{experiment}' not found[/red]")
-        sys.exit(1)
-
-    config = storage.load_config()
-    client = get_client(email, password)
-
+def _extract_ground_truth(
+    storage: ExperimentStorage,
+    config: ExperimentConfig,
+    client: SDMClient,
+    verbosity: int,
+) -> None:
+    """Extract ground truth from validation jobs and save to storage."""
     all_rows: list[GroundTruthRow] = []
     all_code_to_label: dict[str, str] = {}
     category_column = f"{config.field_name}{CATEGORY_SUFFIX}"
@@ -474,6 +489,38 @@ def extract_truth(experiment: str, email: str, password: str, verbosity: int):
     )
 
 
+@cli.command("extract-truth")
+@click.option("--experiment", required=True, help="Experiment name")
+@click.option(
+    "--email", envvar="SDM_USER", required=True, help="SDM email (or SDM_USER env var)"
+)
+@click.option(
+    "--password",
+    envvar="SDM_PASSWORD",
+    required=True,
+    help="SDM password (or SDM_PASSWORD env var)",
+)
+@click.option(
+    "-v",
+    "--verbosity",
+    default=1,
+    type=click.IntRange(0, 2),
+    help="Output verbosity: 0=errors, 1=progress (default), 2=detailed",
+)
+def extract_truth(experiment: str, email: str, password: str, verbosity: int):
+    """Re-extract ground truth from validation jobs (already done during create)."""
+    storage = ExperimentStorage(experiment)
+
+    if not storage.exists():
+        console.print(f"[red]Error: Experiment '{experiment}' not found[/red]")
+        sys.exit(1)
+
+    config = storage.load_config()
+    client = get_client(email, password)
+
+    _extract_ground_truth(storage, config, client, verbosity)
+
+
 # ===== EVALUATE =====
 
 
@@ -539,6 +586,12 @@ def evaluate(
                 "[cyan]Using TRAIN job for evaluation (use --use-eval-job for final eval)[/cyan]",
                 verbosity,
             )
+
+    # Check if job is at the classification step (only if not re-running)
+    if skip_rerun and not check_job_at_classification_step(
+        client, job_id, config.step_id, verbosity
+    ):
+        sys.exit(1)
 
     # Get current prompt
     fields_config = client.get_fields_config(config.step_id)
@@ -678,6 +731,10 @@ def iterate(
 
     # Use train job for iteration
     job_id = config.iteration_job_id
+
+    # Check if job is at the classification step
+    if not check_job_at_classification_step(client, job_id, config.step_id, verbosity):
+        sys.exit(1)
 
     if config.mode == "auto_split":
         log_progress(
